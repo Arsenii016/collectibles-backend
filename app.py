@@ -64,7 +64,15 @@ with app.app_context():
 
 @app.route("/")
 def home():
-    return "API работает 🚀 PostgreSQL подключен"
+    return jsonify({
+        "message": "API работает 🚀 PostgreSQL подключен",
+        "routes": [
+            "/products",
+            "/orders",
+            "/register",
+            "/login"
+        ]
+    })
 
 
 @app.route("/uploads/<filename>")
@@ -91,12 +99,23 @@ def register():
     if existing_user:
         return jsonify({"error": "Пользователь уже существует"}), 400
 
-    user = User(username=username, email=email, password=password)
+    user = User(
+        username=username,
+        email=email,
+        password=password
+    )
 
     db.session.add(user)
     db.session.commit()
 
-    return jsonify({"message": "OK"})
+    return jsonify({
+        "message": "OK",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email
+        }
+    })
 
 
 @app.route("/login", methods=["POST"])
@@ -109,7 +128,10 @@ def login():
     email = data.get("email")
     password = data.get("password")
 
-    user = User.query.filter_by(email=email, password=password).first()
+    user = User.query.filter_by(
+        email=email,
+        password=password
+    ).first()
 
     if not user:
         return jsonify({"error": "Неверные данные"}), 401
@@ -175,7 +197,18 @@ def add_product():
     db.session.add(product)
     db.session.commit()
 
-    return jsonify({"message": "OK"})
+    return jsonify({
+        "message": "OK",
+        "product": {
+            "id": product.id,
+            "name": product.name,
+            "description": product.description,
+            "price": product.price,
+            "seller": product.seller,
+            "category": product.category,
+            "image_url": product.image_url
+        }
+    })
 
 
 @app.route("/products/<int:id>", methods=["DELETE"])
@@ -208,6 +241,9 @@ def create_order():
 
     if not customer_name or not phone or not address or not payment_method:
         return jsonify({"error": "Заполните данные заказа"}), 400
+
+    if not items:
+        return jsonify({"error": "Корзина пустая"}), 400
 
     order = Order(
         customer_name=customer_name,
