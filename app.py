@@ -22,6 +22,8 @@ BASE_URL = "https://collectibles-backend-hcey.onrender.com"
 
 db = SQLAlchemy(app)
 
+ORDER_STATUSES = ["Created", "Paid", "Shipped", "Delivered"]
+
 
 class User(db.Model):
     __tablename__ = "users"
@@ -60,6 +62,20 @@ class Order(db.Model):
 
 with app.app_context():
     db.create_all()
+
+
+def order_to_dict(order):
+    return {
+        "id": order.id,
+        "customer_name": order.customer_name,
+        "phone": order.phone,
+        "address": order.address,
+        "payment_method": order.payment_method,
+        "comment": order.comment,
+        "total": order.total,
+        "items": json.loads(order.items),
+        "status": order.status
+    }
 
 
 @app.route("/")
@@ -268,23 +284,33 @@ def create_order():
 @app.route("/orders", methods=["GET"])
 def get_orders():
     orders = Order.query.order_by(Order.id.desc()).all()
+    return jsonify([order_to_dict(order) for order in orders])
 
-    result = []
 
-    for order in orders:
-        result.append({
-            "id": order.id,
-            "customer_name": order.customer_name,
-            "phone": order.phone,
-            "address": order.address,
-            "payment_method": order.payment_method,
-            "comment": order.comment,
-            "total": order.total,
-            "items": json.loads(order.items),
-            "status": order.status
-        })
+@app.route("/orders/<int:id>/status", methods=["PATCH"])
+def update_order_status(id):
+    data = request.json
 
-    return jsonify(result)
+    if not data:
+        return jsonify({"error": "Нет данных"}), 400
+
+    new_status = data.get("status")
+
+    if new_status not in ORDER_STATUSES:
+      return jsonify({"error": "Некорректный статус"}), 400
+
+    order = Order.query.get(id)
+
+    if not order:
+        return jsonify({"error": "Заказ не найден"}), 404
+
+    order.status = new_status
+    db.session.commit()
+
+    return jsonify({
+        "message": "STATUS_UPDATED",
+        "order": order_to_dict(order)
+    })
 
 
 if __name__ == "__main__":
