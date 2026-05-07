@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 from werkzeug.utils import secure_filename
 import os
 import json
@@ -50,6 +51,7 @@ class Order(db.Model):
     __tablename__ = "orders"
 
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=True)
     customer_name = db.Column(db.String(150), nullable=False)
     phone = db.Column(db.String(100), nullable=False)
     address = db.Column(db.Text, nullable=False)
@@ -63,10 +65,19 @@ class Order(db.Model):
 with app.app_context():
     db.create_all()
 
+    try:
+        db.session.execute(
+            text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_id INTEGER")
+        )
+        db.session.commit()
+    except Exception as error:
+        print("Migration skipped:", error)
+
 
 def order_to_dict(order):
     return {
         "id": order.id,
+        "user_id": order.user_id,
         "customer_name": order.customer_name,
         "phone": order.phone,
         "address": order.address,
@@ -85,6 +96,7 @@ def home():
         "routes": [
             "/products",
             "/orders",
+            "/users/<id>/orders",
             "/register",
             "/login"
         ]
@@ -115,11 +127,7 @@ def register():
     if existing_user:
         return jsonify({"error": "Пользователь уже существует"}), 400
 
-    user = User(
-        username=username,
-        email=email,
-        password=password
-    )
+    user = User(username=username, email=email, password=password)
 
     db.session.add(user)
     db.session.commit()
@@ -144,10 +152,7 @@ def login():
     email = data.get("email")
     password = data.get("password")
 
-    user = User.query.filter_by(
-        email=email,
-        password=password
-    ).first()
+    user = User.query.filter_by(email=email, password=password).first()
 
     if not user:
         return jsonify({"error": "Неверные данные"}), 401
@@ -213,18 +218,7 @@ def add_product():
     db.session.add(product)
     db.session.commit()
 
-    return jsonify({
-        "message": "OK",
-        "product": {
-            "id": product.id,
-            "name": product.name,
-            "description": product.description,
-            "price": product.price,
-            "seller": product.seller,
-            "category": product.category,
-            "image_url": product.image_url
-        }
-    })
+    return jsonify({"message": "OK"})
 
 
 @app.route("/products/<int:id>", methods=["DELETE"])
@@ -247,6 +241,7 @@ def create_order():
     if not data:
         return jsonify({"error": "Нет данных"}), 400
 
+    user_id = data.get("user_id")
     customer_name = data.get("customer_name")
     phone = data.get("phone")
     address = data.get("address")
@@ -262,6 +257,7 @@ def create_order():
         return jsonify({"error": "Корзина пустая"}), 400
 
     order = Order(
+        user_id=user_id,
         customer_name=customer_name,
         phone=phone,
         address=address,
@@ -287,6 +283,12 @@ def get_orders():
     return jsonify([order_to_dict(order) for order in orders])
 
 
+@app.route("/users/<int:user_id>/orders", methods=["GET"])
+def get_user_orders(user_id):
+    orders = Order.query.filter_by(user_id=user_id).order_by(Order.id.desc()).all()
+    return jsonify([order_to_dict(order) for order in orders])
+
+
 @app.route("/orders/<int:id>/status", methods=["PATCH"])
 def update_order_status(id):
     data = request.json
@@ -297,7 +299,7 @@ def update_order_status(id):
     new_status = data.get("status")
 
     if new_status not in ORDER_STATUSES:
-      return jsonify({"error": "Некорректный статус"}), 400
+        return jsonify({"error": "Некорректный статус"}), 400
 
     order = Order.query.get(id)
 
