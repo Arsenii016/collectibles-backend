@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
 import os
 
 app = Flask(__name__)
@@ -8,6 +9,8 @@ CORS(app)
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+BASE_URL = "https://collectibles-backend-hcey.onrender.com"
 
 users = []
 products = []
@@ -27,14 +30,24 @@ def uploaded_file(filename):
 def register():
     data = request.json
 
-    if any(u["email"] == data["email"] for u in users):
-        return jsonify({"error": "Пользователь уже существует"})
+    if not data:
+        return jsonify({"error": "Нет данных"}), 400
+
+    username = data.get("username")
+    email = data.get("email")
+    password = data.get("password")
+
+    if not username or not email or not password:
+        return jsonify({"error": "Заполните все поля"}), 400
+
+    if any(u["email"] == email for u in users):
+        return jsonify({"error": "Пользователь уже существует"}), 400
 
     user = {
         "id": len(users) + 1,
-        "username": data["username"],
-        "email": data["email"],
-        "password": data["password"]
+        "username": username,
+        "email": email,
+        "password": password
     }
 
     users.append(user)
@@ -45,11 +58,17 @@ def register():
 def login():
     data = request.json
 
+    if not data:
+        return jsonify({"error": "Нет данных"}), 400
+
+    email = data.get("email")
+    password = data.get("password")
+
     for user in users:
-        if user["email"] == data["email"] and user["password"] == data["password"]:
+        if user["email"] == email and user["password"] == password:
             return jsonify({"user": user})
 
-    return jsonify({"error": "Неверные данные"})
+    return jsonify({"error": "Неверные данные"}), 401
 
 
 @app.route("/products", methods=["GET"])
@@ -65,13 +84,15 @@ def add_product():
     seller_id = request.form.get("seller_id")
     category = request.form.get("category")
 
-    file = request.files.get("image")
     image_url = ""
 
-    if file:
-        filepath = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
+    file = request.files.get("image")
+
+    if file and file.filename:
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
         file.save(filepath)
-        image_url = f"http://127.0.0.1:5000/uploads/{file.filename}"
+        image_url = f"{BASE_URL}/uploads/{filename}"
 
     product = {
         "id": len(products) + 1,
@@ -84,7 +105,7 @@ def add_product():
     }
 
     products.append(product)
-    return jsonify({"message": "OK"})
+    return jsonify({"message": "OK", "product": product})
 
 
 @app.route("/products/<int:id>", methods=["DELETE"])
