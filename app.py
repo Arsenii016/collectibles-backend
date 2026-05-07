@@ -9,21 +9,22 @@ CORS(app)
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-
-BASE_URL = "https://collectibles-backend-hcey.onrender.com"
-
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
     "DATABASE_URL",
     "sqlite:///collectibles.db"
 )
-
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+BASE_URL = "https://collectibles-backend-hcey.onrender.com"
 
 db = SQLAlchemy(app)
 
 
 class User(db.Model):
+    __tablename__ = "users"
+
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(120), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
@@ -31,6 +32,8 @@ class User(db.Model):
 
 
 class Product(db.Model):
+    __tablename__ = "products"
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
@@ -46,12 +49,12 @@ with app.app_context():
 
 @app.route("/")
 def home():
-    return "API работает 🚀"
+    return "API работает 🚀 PostgreSQL подключен"
 
 
 @app.route("/uploads/<filename>")
 def uploaded_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
 
 @app.route("/register", methods=["POST"])
@@ -74,6 +77,7 @@ def register():
         return jsonify({"error": "Пользователь уже существует"}), 400
 
     user = User(username=username, email=email, password=password)
+
     db.session.add(user)
     db.session.commit()
 
@@ -132,8 +136,10 @@ def add_product():
     seller_id = request.form.get("seller_id")
     category = request.form.get("category")
 
-    image_url = ""
+    if not name or not price:
+        return jsonify({"error": "Название и цена обязательны"}), 400
 
+    image_url = ""
     file = request.files.get("image")
 
     if file and file.filename:
