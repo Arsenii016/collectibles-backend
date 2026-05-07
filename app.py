@@ -3,6 +3,7 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 import os
+import json
 
 app = Flask(__name__)
 CORS(app)
@@ -41,6 +42,20 @@ class Product(db.Model):
     seller = db.Column(db.String(50))
     category = db.Column(db.String(100))
     image_url = db.Column(db.Text)
+
+
+class Order(db.Model):
+    __tablename__ = "orders"
+
+    id = db.Column(db.Integer, primary_key=True)
+    customer_name = db.Column(db.String(150), nullable=False)
+    phone = db.Column(db.String(100), nullable=False)
+    address = db.Column(db.Text, nullable=False)
+    payment_method = db.Column(db.String(100), nullable=False)
+    comment = db.Column(db.Text)
+    total = db.Column(db.String(50), nullable=False)
+    items = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(50), default="Created")
 
 
 with app.app_context():
@@ -174,6 +189,66 @@ def delete_product(id):
     db.session.commit()
 
     return jsonify({"message": "Удалено"})
+
+
+@app.route("/orders", methods=["POST"])
+def create_order():
+    data = request.json
+
+    if not data:
+        return jsonify({"error": "Нет данных"}), 400
+
+    customer_name = data.get("customer_name")
+    phone = data.get("phone")
+    address = data.get("address")
+    payment_method = data.get("payment_method")
+    comment = data.get("comment", "")
+    total = data.get("total")
+    items = data.get("items", [])
+
+    if not customer_name or not phone or not address or not payment_method:
+        return jsonify({"error": "Заполните данные заказа"}), 400
+
+    order = Order(
+        customer_name=customer_name,
+        phone=phone,
+        address=address,
+        payment_method=payment_method,
+        comment=comment,
+        total=str(total),
+        items=json.dumps(items, ensure_ascii=False),
+        status="Paid" if payment_method != "Cash on delivery" else "Created"
+    )
+
+    db.session.add(order)
+    db.session.commit()
+
+    return jsonify({
+        "message": "ORDER_CREATED",
+        "order_id": order.id
+    })
+
+
+@app.route("/orders", methods=["GET"])
+def get_orders():
+    orders = Order.query.order_by(Order.id.desc()).all()
+
+    result = []
+
+    for order in orders:
+        result.append({
+            "id": order.id,
+            "customer_name": order.customer_name,
+            "phone": order.phone,
+            "address": order.address,
+            "payment_method": order.payment_method,
+            "comment": order.comment,
+            "total": order.total,
+            "items": json.loads(order.items),
+            "status": order.status
+        })
+
+    return jsonify(result)
 
 
 if __name__ == "__main__":
