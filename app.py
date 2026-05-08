@@ -20,12 +20,11 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-BASE_URL = "https://collectibles-backend-hcey.onrender.com"
-
 cloudinary.config(
     cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
     api_key=os.environ.get("CLOUDINARY_API_KEY"),
-    api_secret=os.environ.get("CLOUDINARY_API_SECRET")
+    api_secret=os.environ.get("CLOUDINARY_API_SECRET"),
+    secure=True
 )
 
 db = SQLAlchemy(app)
@@ -208,11 +207,19 @@ def add_product():
     file = request.files.get("image")
 
     if file and file.filename:
-        upload_result = cloudinary.uploader.upload(
-            file,
-            folder="collectibles-products"
-        )
-        image_url = upload_result["secure_url"]
+        try:
+            upload_result = cloudinary.uploader.upload(
+                file,
+                folder="collectibles-products",
+                resource_type="image"
+            )
+            image_url = upload_result.get("secure_url", "")
+        except Exception as error:
+            print("Cloudinary upload error:", error)
+            return jsonify({
+                "error": "Ошибка загрузки изображения в Cloudinary",
+                "details": str(error)
+            }), 500
 
     product = Product(
         name=name,
