@@ -2,9 +2,10 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
-from werkzeug.utils import secure_filename
 import os
 import json
+import cloudinary
+import cloudinary.uploader
 
 app = Flask(__name__)
 CORS(app)
@@ -20,6 +21,12 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 BASE_URL = "https://collectibles-backend-hcey.onrender.com"
+
+cloudinary.config(
+    cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.environ.get("CLOUDINARY_API_KEY"),
+    api_secret=os.environ.get("CLOUDINARY_API_SECRET")
+)
 
 db = SQLAlchemy(app)
 
@@ -92,7 +99,7 @@ def order_to_dict(order):
 @app.route("/")
 def home():
     return jsonify({
-        "message": "API работает 🚀 PostgreSQL подключен",
+        "message": "API работает 🚀 PostgreSQL + Cloudinary подключены",
         "routes": [
             "/products",
             "/orders",
@@ -201,10 +208,11 @@ def add_product():
     file = request.files.get("image")
 
     if file and file.filename:
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        file.save(filepath)
-        image_url = f"{BASE_URL}/uploads/{filename}"
+        upload_result = cloudinary.uploader.upload(
+            file,
+            folder="collectibles-products"
+        )
+        image_url = upload_result["secure_url"]
 
     product = Product(
         name=name,
@@ -218,7 +226,18 @@ def add_product():
     db.session.add(product)
     db.session.commit()
 
-    return jsonify({"message": "OK"})
+    return jsonify({
+        "message": "OK",
+        "product": {
+            "id": product.id,
+            "name": product.name,
+            "description": product.description,
+            "price": product.price,
+            "seller": product.seller,
+            "category": product.category,
+            "image_url": product.image_url
+        }
+    })
 
 
 @app.route("/products/<int:id>", methods=["DELETE"])
